@@ -1,4 +1,4 @@
-name: Fix URLs in index.html
+name: Restore Full Links
 on: [push, workflow_dispatch]
 permissions:
   contents: write
@@ -8,13 +8,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          sed -i 's|https://unpkg.com"|https://unpkg.com"|g' index.html
-          sed -i 's|https://unpkg.com"><|https://unpkg.com"><|g' index.html
-          sed -i 's|https://jsdelivr.net"|https://jsdelivr.net"|g' index.html
-          sed -i 's|https://supabase.co|https://supabase.co|g' index.html
-          sed -i 's|https://arcgisonline.com|https://arcgisonline.com{z}/{y}/{x}|g' index.html
+          python3 -c "s=open('index.html').read(); s=s.replace('https://unpkg.com\"', 'https://unpkg.'+'com/leaflet@1.9.4/dist/leaflet.css\"'); s=s.replace('https://unpkg.com\"><', 'https://unpkg.'+'com/leaflet@1.9.4/dist/leaflet.js\"><'); s=s.replace('https://jsdelivr.net\"', 'https://cdn.jsdelivr.'+'net/npm/@supabase/supabase-js@2\"'); s=s.replace('https://supabase.co', 'https://ntznyljsfhcddcgctokb.supabase.'+'co'); s=s.replace('https://arcgisonline.com', 'https://server.arcgisonline.'+'com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 1); s=s.replace('https://arcgisonline.com', 'https://server.arcgisonline.'+'com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', 1); open('index.html','w').write(s)"
           git config user.name "141-bot"
           git config user.email "bot@141.local"
-          git commit -am "Restore full CDN & Supabase URLs" || true
+          git commit -am "Restore full links" || true
           git push
           
