@@ -1,0 +1,325 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:video_player/video_player.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_volume_controller/flutter_volume_controller.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+const String supabaseUrl = 'https://supabase.co';
+
+const String supabaseKey = 'sb_publishable_MHU7_JXFMyj2kpq8a0qJPg_1GWlqrqd';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
+  runApp(const TaskForce141App());
+}
+
+final supabase = Supabase.instance.client;
+
+class TaskForce141App extends StatelessWidget {
+  const TaskForce141App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '141 SYSTEMS',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF06090C),
+        primaryColor: const Color(0xFF00E5FF),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF00E5FF),
+          secondary: Color(0xFF39FF14),
+          error: Color(0xFFFF1744),
+        ),
+      ),
+      home: const BootScreen(),
+    );
+  }
+}
+
+class BootScreen extends StatefulWidget {
+  const BootScreen({super.key});
+
+  @override
+  State<BootScreen> createState() => _BootScreenState();
+}
+
+class _BootScreenState extends State<BootScreen> {
+  VideoPlayerController? _controller;
+  bool _hasVideo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initBoot();
+  }
+
+  Future<void> _initBoot() async {
+    try {
+      _controller = VideoPlayerController.asset('assets/boot.mp4');
+      await _controller!.initialize();
+      setState(() => _hasVideo = true);
+      _controller!.play();
+      _controller!.addListener(() {
+        if (_controller!.value.position >= _controller!.value.duration &&
+            _controller!.value.duration > Duration.zero) {
+          _proceed();
+        }
+      });
+    } catch (_) {
+      Future.delayed(const Duration(seconds: 3), _proceed);
+    }
+  }
+
+  void _proceed() {
+    if (!mounted) return;
+    final session = supabase.auth.currentSession;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            session == null ? const LoginScreen() : const TacticalHubScreen(),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: _hasVideo && _controller != null
+            ? AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: VideoPlayer(_controller!),
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.shield, size: 90, color: Color(0xFF00E5FF)),
+                  SizedBox(height: 20),
+                  Text('141 SYSTEMS // MW2',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 4,
+                          color: Color(0xFF00E5FF))),
+                  SizedBox(height: 12),
+                  Text('INITIALIZING TACTICAL UPLINK...',
+                      style: TextStyle(color: Colors.grey, letterSpacing: 2)),
+                  SizedBox(height: 24),
+                  CircularProgressIndicator(color: Color(0xFF00E5FF)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _callsignCtrl = TextEditingController(text: 'GHOST');
+  bool _loading = false;
+
+  Future<void> _login() async {
+    setState(() => _loading = true);
+    try {
+      final res = await supabase.auth.signInWithPassword(
+        email: _emailCtrl.text.trim(),
+        password: _passCtrl.text.trim(),
+      );
+      if (res.user != null) {
+        await supabase.from('squad_locations').upsert({
+          'user_id': res.user!.id,
+          'callsign': _callsignCtrl.text.trim().isEmpty
+              ? 'OP-141'
+              : _callsignCtrl.text.trim().toUpperCase(),
+        });
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const TacticalHubScreen()),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('ACCESS DENIED: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('TASK FORCE 141 // AUTH',
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 3,
+                    color: Color(0xFF00E5FF))),
+            const SizedBox(height: 30),
+            TextField(
+              controller: _callsignCtrl,
+              decoration: const InputDecoration(
+                labelText: 'CALLSIGN (EDITABLE ANYTIME)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _emailCtrl,
+              decoration: const InputDecoration(
+                labelText: 'OPERATOR EMAIL',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'PASSCODE',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00E5FF),
+                    foregroundColor: Colors.black),
+                onPressed: _loading ? null : _login,
+                child: Text(_loading ? 'AUTHENTICATING...' : 'ENTER COMMS',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, letterSpacing: 2)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class TacticalHubScreen extends StatefulWidget {
+  const TacticalHubScreen({super.key});
+
+  @override
+  State<TacticalHubScreen> createState() => _TacticalHubScreenState();
+}
+
+class _TacticalHubScreenState extends State<TacticalHubScreen> {
+  int _tabIndex = 0;
+  String _myCallsign = 'OP-141';
+  bool _mySosActive = false;
+  bool _alarmPlaying = false;
+  List<Map<String, dynamic>> _squad = [];
+  StreamSubscription? _gpsSub;
+  StreamSubscription? _squadSub;
+  final MapController _mapController = MapController();
+  final AudioPlayer _sirenPlayer = AudioPlayer();
+
+  @override
+  void initState() {
+    super.initState();
+    _initTacticalSystems();
+  }
+
+  Future<void> _initTacticalSystems() async {
+    await [
+      Permission.location,
+      Permission.microphone,
+      Permission.camera,
+      Permission.storage,
+    ].request();
+
+    final uid = supabase.auth.currentUser!.id;
+    final me = await supabase
+        .from('squad_locations')
+        .select()
+        .eq('user_id', uid)
+        .maybeSingle();
+    if (me != null && mounted) {
+      setState(() {
+        _myCallsign = me['callsign'] ?? 'OP-141';
+        _mySosActive = me['is_sos'] ?? false;
+      });
+    }
+
+    _squadSub = supabase
+        .from('squad_locations')
+        .stream(primaryKey: ['user_id']).listen((rows) {
+      if (!mounted) return;
+      setState(() => _squad = rows);
+      final anySos = rows.any((r) => r['is_sos'] == true);
+      if (anySos && !_alarmPlaying) {
+        _triggerMaxSiren();
+        final distressed = rows.firstWhere((r) => r['is_sos'] == true);
+        _mapController.move(
+          LatLng(distressed['latitude'], distressed['longitude']),
+          17.5,
+        );
+      } else if (!anySos && _alarmPlaying) {
+        _stopSiren();
+      }
+    });
+
+    _gpsSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 3,
+      ),
+    ).listen((pos) async {
+      await supabase.from('squad_locations').upsert({
+        'user_id': uid,
+        'callsign': _myCallsign,
+        'latitude': pos.latitude,
+        'longitude': pos.longitude,
+        'is_sos': _mySosActive,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    });
+  }
+
+  Future<void> _triggerMaxSiren() async {
+    _alarmPlaying = true;
+    try {
+      await FlutterVolumeController.setVolume(1.0);
+      await _sirenPlayer.setAudioContext(AudioContext(
+        android: const AudioContextAndroid(
+          usageType: AndroidUsageType.alarm,
+          contentType: AndroidContentType.sonification,
+          
