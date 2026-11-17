@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>141 SYSTEMS // MW2</title>
+  <link rel="stylesheet" href="https://cloudflare.com" />
+  <script src="https://cloudflare.com"></script>
+  <script src="https://jsdelivr.net"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', monospace; }
     body { background: #06090C; color: #E0F7FA; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
@@ -87,44 +90,27 @@
   <audio id="siren-audio" src="sos.mp3" loop preload="auto"></audio>
 
 <script>
-  const css = document.createElement('link');
-  css.rel = 'stylesheet';
-  css.href = 'https://unpkg.' + 'com/leaflet@1.9.4/dist/leaflet.css';
-  document.head.appendChild(css);
-
-  function loadScript(src) {
-    return new Promise((res) => {
-      const s = document.createElement('script');
-      s.src = src; s.onload = res; s.onerror = res;
-      document.head.appendChild(s);
-    });
-  }
-
+  const SUPABASE_URL = 'https://' + 'ntznyljsfhcddcgctokb.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_MHU7_JXFMyj2kpq8a0qJPg_1GWlqrqd';
   let sb = null, myUser = null, myCallsign = 'GHOST', mySos = false, map = null, markers = {}, mediaRec = null, audioChunks = [];
 
-  (async function boot() {
-    await loadScript('https://unpkg.' + 'com/leaflet@1.9.4/dist/leaflet.js');
-    await loadScript('https://cdn.jsdelivr.' + 'net/npm/@supabase/supabase-js@2');
-
-    const SUPABASE_URL = 'https://ntznyljsfhcddcgctokb.supabase.' + 'co';
-    const SUPABASE_KEY = 'sb_publishable_MHU7_JXFMyj2kpq8a0qJPg_1GWlqrqd';
-    if (window.supabase) {
-      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    }
-
-    setTimeout(async () => {
-      document.getElementById('boot-screen').classList.add('hidden');
-      try {
+  setTimeout(async () => {
+    document.getElementById('boot-screen').classList.add('hidden');
+    try {
+      if (window.supabase) {
+        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         const { data: { session } } = await sb.auth.getSession();
         if (session) { myUser = session.user; startHUD(); return; }
-      } catch (_) {}
-      document.getElementById('auth-screen').classList.remove('hidden');
-    }, 3000);
-  })();
+      }
+    } catch (_) {}
+    document.getElementById('auth-screen').classList.remove('hidden');
+  }, 2500);
 
   async function login() {
     const errBox = document.getElementById('auth-err');
-    errBox.innerText = 'CONNECTING...';
+    errBox.innerText = 'AUTHENTICATING...';
+    if (!sb && window.supabase) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    if (!sb) { errBox.innerText = 'NETWORK SLOW - REFRESH PAGE'; return; }
     const email = document.getElementById('email-input').value.trim();
     const password = document.getElementById('pass-input').value.trim();
     myCallsign = (document.getElementById('callsign-input').value.trim() || 'OP-141').toUpperCase();
@@ -143,9 +129,11 @@
     document.getElementById('my-callsign').innerText = myCallsign;
     updateSosUI();
 
-    map = L.map('map').setView([10.8505, 76.2711], 16);
-    L.tileLayer('https://server.arcgisonline.' + 'com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
-    L.tileLayer('https://server.arcgisonline.' + 'com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+    if (window.L) {
+      map = L.map('map').setView([10.8505, 76.2711], 16);
+      L.tileLayer('https://' + '://arcgisonline.com{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+      L.tileLayer('https://' + '://arcgisonline.com{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+    }
 
     navigator.geolocation.watchPosition(async (pos) => {
       await sb.from('squad_locations').upsert({
@@ -167,5 +155,7 @@
     let activeSos = null;
     rows.forEach(r => {
       if (r.is_sos) activeSos = r;
-      if (!r.latitude || !r.longitude) return;
+      if (!r.latitude || !r.longitude || !map) return;
+      const html = `<div class="squad-tag ${r.is_sos ? 'sos' : ''}">⌖ ${r.callsign}</div>`;
+      const icon = L.divIcon({ html, className: '' });
   
