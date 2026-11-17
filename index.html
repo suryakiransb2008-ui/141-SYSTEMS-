@@ -4,15 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>141 SYSTEMS // MW2</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', monospace; }
     body { background: #06090C; color: #E0F7FA; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
     .hidden { display: none !important; }
     #boot-screen { position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    #boot-video { width: 100%; height: 100%; object-fit: cover; }
+    #boot-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; }
     .shield { width: 84px; height: 84px; border: 3px solid #00E5FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: bold; color: #00E5FF; box-shadow: 0 0 25px #00E5FF55; animation: pulse 1.4s infinite; }
     @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
     #auth-screen { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px; gap: 14px; }
@@ -20,7 +17,7 @@
     button { background: #00E5FF; color: #000; border: none; padding: 14px; font-weight: bold; letter-spacing: 2px; border-radius: 4px; cursor: pointer; }
     header { background: #0A0F14; border-bottom: 1px solid #00E5FF33; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
     #callsign-btn { color: #00E5FF; font-weight: bold; font-size: 15px; letter-spacing: 1.5px; cursor: pointer; }
-    #sos-btn { background: #3A080E; color: #FFF; border: 1px solid #FF1744; padding: 8px 14px; font-size: 12px; border-radius: 4px; user-select: none; }
+    #sos-btn { background: #3A080E; color: #FFF; border: 1px solid #FF1744; padding: 8px 14px; font-size: 12px; border-radius: 4px; }
     #sos-btn.active { background: #FF1744; animation: flash 0.6s infinite; }
     @keyframes flash { 50% { opacity: 0.4; } }
     #sos-banner { background: #FF1744; color: #FFF; text-align: center; padding: 8px; font-weight: bold; font-size: 13px; }
@@ -46,7 +43,7 @@
 
   <div id="boot-screen">
     <video id="boot-video" src="boot.mp4" autoplay muted playsinline onerror="this.remove()"></video>
-    <div id="fallback-boot" style="text-align:center;">
+    <div style="text-align:center;z-index:1;">
       <div class="shield" style="margin:0 auto 18px;">141</div>
       <div style="color:#00E5FF;font-size:20px;font-weight:bold;letter-spacing:4px;">141 SYSTEMS</div>
       <div style="color:#78909C;font-size:12px;margin-top:8px;letter-spacing:2px;">INITIALIZING TACTICAL UPLINK...</div>
@@ -56,7 +53,7 @@
   <div id="auth-screen" class="hidden">
     <div style="color:#00E5FF;font-size:20px;font-weight:bold;letter-spacing:3px;text-align:center;margin-bottom:10px;">TASK FORCE 141 // AUTH</div>
     <input id="callsign-input" type="text" placeholder="CALLSIGN (EDITABLE ANYTIME)" value="GHOST" />
-    <input id="email-input" type="email" placeholder="OPERATOR EMAIL (e.g. op2@141.com)" />
+    <input id="email-input" type="email" placeholder="OPERATOR EMAIL" />
     <input id="pass-input" type="password" placeholder="PASSCODE" />
     <button onclick="login()">ENTER COMMS</button>
     <div id="auth-err" style="color:#FF5252;font-size:12px;text-align:center;"></div>
@@ -68,11 +65,7 @@
       <button id="sos-btn" onclick="toggleSOS()">SOS ALERT</button>
     </header>
     <div id="sos-banner" class="hidden"></div>
-
-    <div id="map-view">
-      <div id="map"></div>
-    </div>
-
+    <div id="map-view"><div id="map"></div></div>
     <div id="comms-view" class="hidden">
       <div id="msg-list"></div>
       <div id="chat-bar">
@@ -85,7 +78,6 @@
         <input id="file-in" type="file" class="hidden" onchange="uploadMedia(this.files[0],'file')" />
       </div>
     </div>
-
     <nav>
       <button id="tab-map" class="active" onclick="switchTab('map')">GEO EARTH</button>
       <button id="tab-comms" onclick="switchTab('comms')">ENCRYPTED COMMS</button>
@@ -95,25 +87,49 @@
   <audio id="siren-audio" src="sos.mp3" loop preload="auto"></audio>
 
 <script>
-  const SUPABASE_URL = 'https://ntznyljsfhcddcgctokb.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_MHU7_JXFMyj2kpq8a0qJPg_1GWlqrqd';
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const css = document.createElement('link');
+  css.rel = 'stylesheet';
+  css.href = 'https://unpkg.' + 'com/leaflet@1.9.4/dist/leaflet.css';
+  document.head.appendChild(css);
 
-  let myUser = null, myCallsign = 'GHOST', mySos = false, map = null, markers = {}, mediaRec = null, audioChunks = [];
+  function loadScript(src) {
+    return new Promise((res) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = res;
+      document.head.appendChild(s);
+    });
+  }
 
-  setTimeout(async () => {
-    document.getElementById('boot-screen').classList.add('hidden');
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) { myUser = session.user; startHUD(); }
-    else { document.getElementById('auth-screen').classList.remove('hidden'); }
-  }, 3000);
+  let sb = null, myUser = null, myCallsign = 'GHOST', mySos = false, map = null, markers = {}, mediaRec = null, audioChunks = [];
+
+  (async function boot() {
+    await loadScript('https://unpkg.' + 'com/leaflet@1.9.4/dist/leaflet.js');
+    await loadScript('https://cdn.jsdelivr.' + 'net/npm/@supabase/supabase-js@2');
+
+    const SUPABASE_URL = 'https://ntznyljsfhcddcgctokb.supabase.' + 'co';
+    const SUPABASE_KEY = 'sb_publishable_MHU7_JXFMyj2kpq8a0qJPg_1GWlqrqd';
+    if (window.supabase) {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+
+    setTimeout(async () => {
+      document.getElementById('boot-screen').classList.add('hidden');
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) { myUser = session.user; startHUD(); return; }
+      } catch (_) {}
+      document.getElementById('auth-screen').classList.remove('hidden');
+    }, 3000);
+  })();
 
   async function login() {
+    const errBox = document.getElementById('auth-err');
+    errBox.innerText = 'CONNECTING...';
     const email = document.getElementById('email-input').value.trim();
     const password = document.getElementById('pass-input').value.trim();
     myCallsign = (document.getElementById('callsign-input').value.trim() || 'OP-141').toUpperCase();
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) { document.getElementById('auth-err').innerText = error.message; return; }
+    if (error) { errBox.innerText = error.message; return; }
     myUser = data.user;
     await sb.from('squad_locations').upsert({ user_id: myUser.id, callsign: myCallsign });
     document.getElementById('auth-screen').classList.add('hidden');
@@ -128,8 +144,8 @@
     updateSosUI();
 
     map = L.map('map').setView([10.8505, 76.2711], 16);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}{z}/{y}/{x}{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}{z}/{y}/{x}{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://server.arcgisonline.' + 'com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://server.arcgisonline.' + 'com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
 
     navigator.geolocation.watchPosition(async (pos) => {
       await sb.from('squad_locations').upsert({
@@ -141,7 +157,6 @@
 
     loadSquad();
     sb.channel('squad-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'squad_locations' }, loadSquad).subscribe();
-
     loadMessages();
     sb.channel('msg-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, loadMessages).subscribe();
   }
@@ -152,14 +167,5 @@
     let activeSos = null;
     rows.forEach(r => {
       if (r.is_sos) activeSos = r;
-      const html = `<div class="squad-tag ${r.is_sos ? 'sos' : ''}">⌖ ${r.callsign}</div>`;
-      const icon = L.divIcon({ html, className: '' });
-      if (markers[r.user_id]) { markers[r.user_id].setLatLng([r.latitude, r.longitude]).setIcon(icon); }
-      else { markers[r.user_id] = L.marker([r.latitude, r.longitude], { icon }).addTo(map); }
-    });
-    const banner = document.getElementById('sos-banner');
-    const siren = document.getElementById('siren-audio');
-    if (activeSos) {
-      banner.classList.remove('hidden');
-      banner.innerText = `⚠️ EMERGENCY SOS: ${activeSos.callsign} NEEDS EXTRACTION!`;
+      if (!r.latitude || !r.longitude) return;
   
