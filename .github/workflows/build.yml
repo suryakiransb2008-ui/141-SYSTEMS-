@@ -17,10 +17,32 @@ jobs:
         run: |
           mkdir -p assets
           touch assets/.keep
-          sed -i "s|https://supabase.co|https://supabase.co|g" lib/main.dart
-          sed -i "s|contentType:|contentType: AndroidContentType.sonification,|g" lib/main.dart
-          sed -i "/AndroidContentType.sonification,$/N;s/\n.*AndroidContentType.sonification,//" lib/main.dart
-          sed -i "s|withOpacity(0.25)|withValues(alpha: 0.25)|g" lib/main.dart
+          python3 -c "
+          s = open('lib/main.dart').read()
+          s = s.replace('https://supabase.co', 'https://supabase.co')
+          s = s.replace('withOpacity(0.25)', 'withValues(alpha: 0.25)')
+          start = s.index('Future<void> _triggerMaxSiren()')
+          end = s.index('Future<void> _stopSiren()')
+          clean_fn = '''Future<void> _triggerMaxSiren() async {
+            _alarmPlaying = true;
+            try {
+              await FlutterVolumeController.setVolume(1.0);
+              await AudioPlayer.global.setAudioContext(AudioContext(
+                android: const AudioContextAndroid(
+                  usageType: AndroidUsageType.alarm,
+                  contentType: AndroidContentType.sonification,
+                  audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+                ),
+              ));
+              await _sirenPlayer.setReleaseMode(ReleaseMode.loop);
+              await _sirenPlayer.play(AssetSource('sos.mp3'));
+            } catch (_) {}
+          }
+
+          '''
+          s = s[:start] + clean_fn + s[end:]
+          open('lib/main.dart', 'w').write(s)
+          "
           flutter create --platforms=android --org com.taskforce141 .
           sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"\/>\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"\/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"\/>\n    <uses-permission android:name="android.permission.CAMERA"\/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
       - name: Build APK
