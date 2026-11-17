@@ -1,54 +1,20 @@
-name: Build 141 Systems APK
+name: Fix URLs in index.html
 on: [push, workflow_dispatch]
-
+permissions:
+  contents: write
 jobs:
-  build:
+  fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-      - name: Patch Code and Init Android
-        run: |
-          mkdir -p assets
-          touch assets/.keep
-          python3 - << 'EOF'
-          s = open('lib/main.dart').read()
-          s = s.replace('https://supabase.co', 'https://supabase.co')
-          s = s.replace('withOpacity(0.25)', 'withValues(alpha: 0.25)')
-          start = s.index('Future<void> _triggerMaxSiren()')
-          end = s.index('Future<void> _stopSiren()')
-          clean_fn = """Future<void> _triggerMaxSiren() async {
-            _alarmPlaying = true;
-            try {
-              await FlutterVolumeController.setVolume(1.0);
-              await AudioPlayer.global.setAudioContext(AudioContext(
-                android: const AudioContextAndroid(
-                  usageType: AndroidUsageType.alarm,
-                  contentType: AndroidContentType.sonification,
-                  audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-                ),
-              ));
-              await _sirenPlayer.setReleaseMode(ReleaseMode.loop);
-              await _sirenPlayer.play(AssetSource('sos.mp3'));
-            } catch (_) {}
-          }
-
-          """
-          open('lib/main.dart', 'w').write(s[:start] + clean_fn + s[end:])
-          EOF
-          flutter create --platforms=android --org com.taskforce141 .
-          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"\/>\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"\/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"\/>\n    <uses-permission android:name="android.permission.CAMERA"\/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
-      - name: Build APK
-        run: flutter build apk --release
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: 141-systems-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+      - run: |
+          sed -i 's|https://unpkg.com"|https://unpkg.com"|g' index.html
+          sed -i 's|https://unpkg.com"><|https://unpkg.com"><|g' index.html
+          sed -i 's|https://jsdelivr.net"|https://jsdelivr.net"|g' index.html
+          sed -i 's|https://supabase.co|https://supabase.co|g' index.html
+          sed -i 's|https://arcgisonline.com|https://arcgisonline.com{z}/{y}/{x}|g' index.html
+          git config user.name "141-bot"
+          git config user.email "bot@141.local"
+          git commit -am "Restore full CDN & Supabase URLs" || true
+          git push
           
