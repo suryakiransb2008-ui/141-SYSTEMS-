@@ -128,8 +128,8 @@
     updateSosUI();
 
     map = L.map('map').setView([10.8505, 76.2711], 16);
-    L.tileLayer('https://arcgisonline.com{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
-    L.tileLayer('https://arcgisonline.com{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://arcgisonline.com{z}/{y}/{x}{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://arcgisonline.com{z}/{y}/{x}{z}/{y}/{x}', { maxZoom: 19 }).addTo(map);
 
     navigator.geolocation.watchPosition(async (pos) => {
       await sb.from('squad_locations').upsert({
